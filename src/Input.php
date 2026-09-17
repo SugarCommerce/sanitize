@@ -201,6 +201,33 @@ final class Input {
 	}
 
 	/**
+	 * Trimmed and capped, with the inside left alone.
+	 *
+	 * For values that are not prose: a body of HTML, a template, anything
+	 * where collapsing runs of whitespace would change what was written.
+	 * {@see clean_text()} is the right call for everything else.
+	 *
+	 * Counts characters rather than bytes, so a limit of 500 cannot cut a
+	 * multi-byte character in half and leave invalid UTF-8 in a database.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param mixed $value      Untrusted value.
+	 * @param int   $max_length Truncation point. 0 for no limit.
+	 *
+	 * @return string
+	 */
+	public static function truncate( mixed $value, int $max_length = 0 ): string {
+		if ( ! is_scalar( $value ) ) {
+			return '';
+		}
+
+		$value = trim( (string) $value );
+
+		return $max_length > 0 ? mb_substr( $value, 0, $max_length ) : $value;
+	}
+
+	/**
 	 * A CSS hex colour, or ''.
 	 *
 	 * Six digits only. The three-digit form is valid CSS but doubles the

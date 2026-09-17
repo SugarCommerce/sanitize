@@ -18,6 +18,7 @@ Zero dependencies.
 use SugarCommerce\Sanitize\Input;
 
 Input::clean_text( $value, 120 );           // control characters out, whitespace collapsed
+Input::truncate( $html, 20_000 );          // trimmed and capped, inside untouched
 Input::email( ' Jordan@EXAMPLE.COM ' );     // 'Jordan@example.com', or ''
 Input::mask_email( 'jordan@example.com' );  // 'jo****@example.com'
 Input::url( $value );                       // http(s) only, or ''
@@ -67,6 +68,11 @@ reaches an `href`, and `filter_var()` on its own accepts them happily.
 use: Stripe's `acct_`, `price_`, `cs_`, and plenty of others. Checking the
 prefix as well as the alphabet is what stops a customer id being passed where
 an account id was meant and silently looking up nothing.
+
+**`truncate()`** is `clean_text()`'s counterpart for values that are not prose
+— an HTML body, a template — where collapsing runs of whitespace would change
+what was written. It trims the ends, caps the length in characters rather than
+bytes, and leaves the middle alone.
 
 **`hex_colour()`** takes six digits only, lower-cased. The three-digit form is
 valid CSS but doubles the shapes anything downstream has to handle, and a

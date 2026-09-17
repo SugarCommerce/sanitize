@@ -193,4 +193,24 @@ final class InputTest extends TestCase {
 	public function test_numbers_still_clean_to_text(): void {
 		$this->assertSame( '42', Input::clean_text( 42 ) );
 	}
+
+	/* ── truncate ───────────────────────────────────────────────────── */
+
+	public function test_truncate_trims_the_ends_only(): void {
+		// Unlike clean_text, the inside is left exactly as written — this is
+		// for HTML and templates, where collapsing whitespace changes them.
+		$this->assertSame( "a\n\n  b", Input::truncate( "  a\n\n  b  " ) );
+	}
+
+	public function test_truncate_counts_characters_not_bytes(): void {
+		$this->assertSame( 'ééé', Input::truncate( 'ééééé', 3 ) );
+	}
+
+	public function test_truncate_with_no_limit_keeps_everything(): void {
+		$this->assertSame( str_repeat( 'a', 500 ), Input::truncate( str_repeat( 'a', 500 ) ) );
+	}
+
+	public function test_truncate_refuses_a_non_scalar(): void {
+		$this->assertSame( '', Input::truncate( array( 'a' ) ) );
+	}
 }
