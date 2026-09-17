@@ -18,6 +18,7 @@ Zero dependencies.
 use SugarCommerce\Sanitize\Input;
 
 Input::clean_text( $value, 120 );           // control characters out, whitespace collapsed
+Input::multiline( $note, 1_000, 20 );       // paragraphs kept, runs of blanks collapsed
 Input::truncate( $html, 20_000 );          // trimmed and capped, inside untouched
 Input::email( ' Jordan@EXAMPLE.COM ' );     // 'Jordan@example.com', or ''
 Input::mask_email( 'jordan@example.com' );  // 'jo****@example.com'
@@ -30,7 +31,8 @@ Input::hex_colour( $value );                               // '#6d28d9', or ''
 Input::one_of( $_GET['sort'] ?? '', $sortable, 'created_at' );
 ```
 
-`clean_text()`, `email()`, `url()`, `hex_colour()` and `int_or_null()` take
+`clean_text()`, `multiline()`, `email()`, `url()`, `hex_colour()` and
+`int_or_null()` take
 `mixed`, not `string`. That is deliberate: untrusted input is not a string
 until you have checked, and a caller writing `(string) $input['name']` on
 something that turns out to be an array gets `"Array"` and a warning — and
@@ -68,6 +70,13 @@ reaches an `href`, and `filter_var()` on its own accepts them happily.
 use: Stripe's `acct_`, `price_`, `cs_`, and plenty of others. Checking the
 prefix as well as the alphabet is what stops a customer id being passed where
 an account id was meant and silently looking up nothing.
+
+**`multiline()`** is `clean_text()` for anything somebody typed into a
+textarea. `clean_text()` collapses every run of whitespace to one space, which
+turns their paragraphs into one long line. This keeps the line breaks, collapses
+runs of blank lines to one, normalises `\r\n` and a lone `\r` to `\n` so the
+same note stores identically whatever it was typed on, and can cap the number
+of lines as well as the number of characters.
 
 **`truncate()`** is `clean_text()`'s counterpart for values that are not prose
 — an HTML body, a template — where collapsing runs of whitespace would change

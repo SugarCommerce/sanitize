@@ -62,6 +62,60 @@ final class Input {
 	}
 
 	/**
+	 * Text that is allowed to have lines in it.
+	 *
+	 * clean_text() collapses every run of whitespace to one space, which is
+	 * right for a name and wrong for a note somebody typed into a textarea:
+	 * their paragraphs come back as one long line.
+	 *
+	 * This keeps single newlines, collapses runs of blank lines to one, and
+	 * still strips the control characters and direction overrides clean_text()
+	 * strips. Carriage returns are normalised away first, so a note typed on
+	 * Windows and the same note typed on a Mac store identically.
+	 *
+	 * @since 1.2.0
+	 *
+	 * @param mixed $value      Untrusted text.
+	 * @param int   $max_length Truncation point. 0 for no limit.
+	 * @param int   $max_lines  Lines to keep. 0 for no limit.
+	 *
+	 * @return string
+	 */
+	public static function multiline( mixed $value, int $max_length = 0, int $max_lines = 0 ): string {
+		if ( ! is_scalar( $value ) ) {
+			return '';
+		}
+
+		$value = preg_replace( '/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', (string) $value ) ?? '';
+		$value = preg_replace( '/[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2064}\x{FEFF}]/u', '', $value ) ?? '';
+
+		// Both \r\n and a lone \r become \n before anything counts lines.
+		$value = str_replace( array( "\r\n", "\r" ), "\n", $value );
+
+		// Horizontal whitespace only: a run of spaces and tabs collapses, a
+		// newline survives.
+		$value = preg_replace( '/[^\S\n]+/u', ' ', $value ) ?? '';
+
+		// Three blank lines and one say the same thing to a reader.
+		$value = preg_replace( '/\n{3,}/', "\n\n", $value ) ?? '';
+
+		// A space before a newline is invisible, and would otherwise count
+		// towards the length.
+		$value = preg_replace( '/ +\n/', "\n", $value ) ?? '';
+		$value = trim( $value );
+
+		if ( $max_lines > 0 ) {
+			$value = implode( "\n", array_slice( explode( "\n", $value ), 0, $max_lines ) );
+		}
+
+		if ( $max_length > 0 && mb_strlen( $value ) > $max_length ) {
+			$value = rtrim( mb_substr( $value, 0, $max_length ) );
+		}
+
+		return $value;
+	}
+
+	/**
 	 * A valid, normalised email address, or ''.
 	 *
 	 * The local part keeps its case because RFC 5321 says it is significant;

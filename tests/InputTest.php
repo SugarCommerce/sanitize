@@ -17,6 +17,59 @@ use SugarCommerce\Sanitize\Input;
  */
 final class InputTest extends TestCase {
 
+	public function test_multiline_keeps_line_breaks(): void {
+		$this->assertSame( "one\ntwo", Input::multiline( "one\ntwo" ) );
+	}
+
+	public function test_multiline_normalises_carriage_returns(): void {
+		// The same note typed on Windows and on a Mac has to store the same,
+		// or the length check fires for one of them and not the other.
+		$this->assertSame( "one\ntwo", Input::multiline( "one\r\ntwo" ) );
+		$this->assertSame( "one\ntwo", Input::multiline( "one\rtwo" ) );
+	}
+
+	public function test_multiline_collapses_horizontal_whitespace_only(): void {
+		$this->assertSame( "a b\nc d", Input::multiline( "a   b\nc\t\td" ) );
+	}
+
+	public function test_multiline_collapses_runs_of_blank_lines(): void {
+		$this->assertSame( "a\n\nb", Input::multiline( "a\n\n\n\n\nb" ) );
+	}
+
+	public function test_multiline_drops_trailing_spaces_before_a_break(): void {
+		$this->assertSame( "a\nb", Input::multiline( "a   \nb" ) );
+	}
+
+	public function test_multiline_trims_the_whole_value(): void {
+		$this->assertSame( 'a', Input::multiline( "\n\n  a  \n\n" ) );
+	}
+
+	public function test_multiline_strips_control_characters(): void {
+		$this->assertSame( "ab\ncd", Input::multiline( "a\x00\x07b\ncd" ) );
+	}
+
+	public function test_multiline_strips_bidirectional_overrides(): void {
+		$this->assertSame( 'exe.txt', Input::multiline( "\u{202E}exe.txt" ) );
+	}
+
+	public function test_multiline_limits_lines(): void {
+		$this->assertSame( "a\nb", Input::multiline( "a\nb\nc\nd", 0, 2 ) );
+		$this->assertSame( "a\nb\nc\nd", Input::multiline( "a\nb\nc\nd", 0, 0 ) );
+	}
+
+	public function test_multiline_truncates_by_characters(): void {
+		$this->assertSame( 'ééé', Input::multiline( 'ééééé', 3 ) );
+	}
+
+	public function test_multiline_truncation_leaves_no_trailing_space(): void {
+		$this->assertSame( 'ab', Input::multiline( 'ab cd', 3 ) );
+	}
+
+	public function test_multiline_refuses_anything_that_is_not_scalar(): void {
+		$this->assertSame( '', Input::multiline( array( 'a' ) ) );
+		$this->assertSame( '', Input::multiline( null ) );
+	}
+
 	public function test_clean_text_collapses_whitespace(): void {
 		$this->assertSame( 'a b', Input::clean_text( "  a \n\t b  " ) );
 	}
