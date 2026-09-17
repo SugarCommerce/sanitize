@@ -37,13 +37,20 @@ final class Input {
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param string $value      Untrusted text.
-	 * @param int    $max_length Truncation point. 0 for no limit.
+	 * @param mixed $value      Untrusted text. Anything that is not a scalar
+	 *                          becomes '', because a caller casting (string)
+	 *                          on an array gets "Array" and a warning, and
+	 *                          "Array" is a value that reaches a database.
+	 * @param int   $max_length Truncation point. 0 for no limit.
 	 *
 	 * @return string
 	 */
-	public static function clean_text( string $value, int $max_length = 0 ): string {
-		$value = preg_replace( '/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $value ) ?? '';
+	public static function clean_text( mixed $value, int $max_length = 0 ): string {
+		if ( ! is_scalar( $value ) ) {
+			return '';
+		}
+
+		$value = preg_replace( '/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', (string) $value ) ?? '';
 		$value = preg_replace( '/[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2064}\x{FEFF}]/u', '', $value ) ?? '';
 		$value = trim( preg_replace( '/\s+/u', ' ', $value ) ?? '' );
 
@@ -65,11 +72,11 @@ final class Input {
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param string $value Untrusted address.
+	 * @param mixed $value Untrusted address.
 	 *
 	 * @return string The address, or '' when it is not one.
 	 */
-	public static function email( string $value ): string {
+	public static function email( mixed $value ): string {
 		$value = self::clean_text( $value, 254 );
 
 		if ( ! str_contains( $value, '@' ) ) {
@@ -114,11 +121,11 @@ final class Input {
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param string $value Untrusted URL.
+	 * @param mixed $value Untrusted URL.
 	 *
 	 * @return string The URL, or '' when it is not a usable one.
 	 */
-	public static function url( string $value ): string {
+	public static function url( mixed $value ): string {
 		$value  = self::clean_text( $value, 2048 );
 		$scheme = strtolower( (string) parse_url( $value, PHP_URL_SCHEME ) );
 
@@ -191,6 +198,58 @@ final class Input {
 		}
 
 		return max( $min, min( $max, (int) $value ) );
+	}
+
+	/**
+	 * A CSS hex colour, or ''.
+	 *
+	 * Six digits only. The three-digit form is valid CSS but doubles the
+	 * number of shapes anything downstream has to handle, and a caller
+	 * comparing stored values would then have `#fff` and `#ffffff` as two
+	 * different colours.
+	 *
+	 * Worth validating rather than escaping. A colour is usually interpolated
+	 * into a `style` attribute, where escaping does nothing useful — the
+	 * dangerous input is not `<script>`, it is `red;background:url(...)`,
+	 * which survives every escaper and is still CSS.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param mixed $value Untrusted colour.
+	 *
+	 * @return string Lower-cased `#rrggbb`, or ''.
+	 */
+	public static function hex_colour( mixed $value ): string {
+		$value = is_scalar( $value ) ? trim( (string) $value ) : '';
+
+		return preg_match( '/^#[0-9a-f]{6}$/i', $value ) ? strtolower( $value ) : '';
+	}
+
+	/**
+	 * An integer in a range, or null when nothing was chosen.
+	 *
+	 * For the settings that mean "no limit" when they are unset: a link that
+	 * never expires, a download that is not capped. Empty string, null and
+	 * zero all mean the same thing, because a select whose "unlimited" option
+	 * has an empty value and a form that posts 0 are both saying it.
+	 *
+	 * Distinct from int(), which always returns a number. The difference is
+	 * whether "not set" is a value the caller needs to keep.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param mixed $value Untrusted value.
+	 * @param int   $min   Lower bound.
+	 * @param int   $max   Upper bound.
+	 *
+	 * @return int|null The clamped integer, or null when unset.
+	 */
+	public static function int_or_null( mixed $value, int $min, int $max ): ?int {
+		if ( null === $value || '' === $value || ! is_numeric( $value ) || 0 === (int) $value ) {
+			return null;
+		}
+
+		return self::int( $value, $min, $max, $min );
 	}
 
 	/**

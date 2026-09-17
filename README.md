@@ -24,8 +24,16 @@ Input::url( $value );                       // http(s) only, or ''
 Input::prefixed_id( $value, 'acct' );       // 'acct_1A2b3C', or ''
 Input::hex( $value, 64 );                   // lower-cased, exact length, or ''
 Input::int( $_GET['page'] ?? 1, 1, 10_000, 1 );
+Input::int_or_null( $_POST['expiry'] ?? null, 1, 3650 );   // null when unset
+Input::hex_colour( $value );                               // '#6d28d9', or ''
 Input::one_of( $_GET['sort'] ?? '', $sortable, 'created_at' );
 ```
+
+`clean_text()`, `email()`, `url()`, `hex_colour()` and `int_or_null()` take
+`mixed`, not `string`. That is deliberate: untrusted input is not a string
+until you have checked, and a caller writing `(string) $input['name']` on
+something that turns out to be an array gets `"Array"` and a warning — and
+`"Array"` is a value that reaches a database.
 
 This is not an escaper. Escaping belongs at the point of output, where the
 context is known; a class that does both produces double-escaped text the first
@@ -59,6 +67,23 @@ reaches an `href`, and `filter_var()` on its own accepts them happily.
 use: Stripe's `acct_`, `price_`, `cs_`, and plenty of others. Checking the
 prefix as well as the alphabet is what stops a customer id being passed where
 an account id was meant and silently looking up nothing.
+
+**`hex_colour()`** takes six digits only, lower-cased. The three-digit form is
+valid CSS but doubles the shapes anything downstream has to handle, and a
+caller comparing stored values would have `#fff` and `#ffffff` as two different
+colours.
+
+It validates rather than escapes, because a colour is usually interpolated into
+a `style` attribute where escaping does nothing useful. The dangerous input is
+not `<script>` — every escaper catches that — it is
+`red;background:url(//evil)`, which survives escaping and is still CSS.
+
+**`int_or_null()`** is for the settings that mean "no limit" when unset: a link
+that never expires, a download that is not capped. Empty string, null, zero and
+nonsense all give `null`, because a select whose "unlimited" option has an empty
+value and a form that posts `0` are both saying the same thing. Distinct from
+`int()`, which always returns a number — the difference is whether "not set" is
+a value you need to keep.
 
 **`int()`** clamps rather than rejecting. A page number of 10,000,000 is
 somebody fuzzing, and answering with the last page is a better response than an

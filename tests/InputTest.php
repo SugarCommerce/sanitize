@@ -118,4 +118,79 @@ final class InputTest extends TestCase {
 	public function test_one_of_takes_an_explicit_default(): void {
 		$this->assertSame( '', Input::one_of( 'z', array( '', 'a', 'b' ), '' ) );
 	}
+
+	/* ── colours ────────────────────────────────────────────────────── */
+
+	public function test_a_hex_colour_is_lower_cased(): void {
+		$this->assertSame( '#6d28d9', Input::hex_colour( '#6D28D9' ) );
+		$this->assertSame( '#ffffff', Input::hex_colour( '  #FFFFFF  ' ) );
+	}
+
+	/**
+	 * The dangerous input is not `<script>`, which every escaper catches. It
+	 * is `red;background:url(...)`, which survives escaping and is still CSS.
+	 */
+	public function test_anything_that_is_not_six_hex_digits_is_refused(): void {
+		$this->assertSame( '', Input::hex_colour( 'red' ) );
+		$this->assertSame( '', Input::hex_colour( 'red;background:url(//evil)' ) );
+		$this->assertSame( '', Input::hex_colour( '#fff' ) );
+		$this->assertSame( '', Input::hex_colour( '#6d28d9;x' ) );
+		$this->assertSame( '', Input::hex_colour( '' ) );
+	}
+
+	public function test_a_non_scalar_colour_is_refused(): void {
+		$this->assertSame( '', Input::hex_colour( array( '#6d28d9' ) ) );
+		$this->assertSame( '', Input::hex_colour( null ) );
+	}
+
+	/* ── optional integers ──────────────────────────────────────────── */
+
+	/**
+	 * A select whose "unlimited" option has an empty value and a form that
+	 * posts 0 are both saying the same thing.
+	 */
+	public function test_unset_means_null_however_it_arrives(): void {
+		foreach ( array( null, '', 0, '0' ) as $unset ) {
+			$this->assertNull( Input::int_or_null( $unset, 1, 100 ) );
+		}
+	}
+
+	public function test_a_chosen_value_is_clamped(): void {
+		$this->assertSame( 30, Input::int_or_null( 30, 1, 100 ) );
+		$this->assertSame( 100, Input::int_or_null( 999, 1, 100 ) );
+		$this->assertSame( 1, Input::int_or_null( -5, 1, 100 ) );
+	}
+
+	public function test_a_numeric_string_is_accepted(): void {
+		$this->assertSame( 30, Input::int_or_null( '30', 1, 100 ) );
+	}
+
+	public function test_nonsense_is_null_rather_than_the_minimum(): void {
+		// int() would return a default here; the caller of int_or_null needs
+		// to know nothing was chosen.
+		$this->assertNull( Input::int_or_null( 'abc', 1, 100 ) );
+		$this->assertNull( Input::int_or_null( array( 5 ), 1, 100 ) );
+	}
+
+	/* ── non-scalar input generally ─────────────────────────────────── */
+
+	/**
+	 * A caller casting (string) on an array gets "Array" and a warning, and
+	 * "Array" is a value that reaches a database.
+	 */
+	public function test_arrays_do_not_become_the_word_array(): void {
+		$this->assertSame( '', Input::clean_text( array( 'a', 'b' ) ) );
+		$this->assertSame( '', Input::email( array( 'a@b.com' ) ) );
+		$this->assertSame( '', Input::url( array( 'https://a.test' ) ) );
+	}
+
+	public function test_null_is_empty_rather_than_an_error(): void {
+		$this->assertSame( '', Input::clean_text( null ) );
+		$this->assertSame( '', Input::email( null ) );
+		$this->assertSame( '', Input::url( null ) );
+	}
+
+	public function test_numbers_still_clean_to_text(): void {
+		$this->assertSame( '42', Input::clean_text( 42 ) );
+	}
 }
