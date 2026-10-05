@@ -266,4 +266,125 @@ final class InputTest extends TestCase {
 	public function test_truncate_refuses_a_non_scalar(): void {
 		$this->assertSame( '', Input::truncate( array( 'a' ) ) );
 	}
+
+	/* ── prefixed id lists ──────────────────────────────────────────── */
+
+	public function test_prefixed_ids_keeps_valid_ids_in_order_once(): void {
+		$this->assertSame(
+			array( 'price_b', 'price_a' ),
+			Input::prefixed_ids( array( 'price_b', 'prod_x', ' price_a ', 'price_b', '', array( 'x' ) ), 'price' )
+		);
+	}
+
+	public function test_prefixed_ids_reads_no_more_than_the_cap(): void {
+		// The cap is on what is read, so a list padded with junk in front
+		// cannot push a real id past it into being counted.
+		$this->assertSame( array( 'prod_a' ), Input::prefixed_ids( array( 'prod_a', 'nope', 'prod_b' ), 'prod', 2 ) );
+	}
+
+	public function test_prefixed_ids_takes_one_scalar_and_refuses_the_rest(): void {
+		$this->assertSame( array( 'prod_a' ), Input::prefixed_ids( 'prod_a', 'prod' ) );
+		$this->assertSame( array(), Input::prefixed_ids( null, 'prod' ) );
+		$this->assertSame( array(), Input::prefixed_ids( new \stdClass(), 'prod' ) );
+	}
+
+	/* ── switches ───────────────────────────────────────────────────── */
+
+	/**
+	 * Values and what they mean, with a default of false.
+	 *
+	 * @return array<string, array{0: mixed, 1: bool}>
+	 */
+	public static function switches(): array {
+		return array(
+			'true'          => array( true, true ),
+			'one'           => array( 1, true ),
+			'string one'    => array( '1', true ),
+			'string true'   => array( 'true', true ),
+			'on'            => array( 'on', true ),
+			'yes'           => array( 'yes', true ),
+			'false'         => array( false, false ),
+			'string false'  => array( 'false', false ),
+			'zero'          => array( '0', false ),
+			'off'           => array( 'off', false ),
+			'nonsense'      => array( 'maybe', false ),
+			'array'         => array( array( 1 ), false ),
+			'null'          => array( null, false ),
+		);
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'switches' )]
+	public function test_bool_reads_switches_strictly( mixed $value, bool $expected ): void {
+		$this->assertSame( $expected, Input::bool( $value ) );
+	}
+
+	public function test_bool_falls_back_to_the_default_only_for_nonsense(): void {
+		$this->assertTrue( Input::bool( 'maybe', true ) );
+		$this->assertFalse( Input::bool( 'false', true ) );
+	}
+
+	/* ── origins ────────────────────────────────────────────────────── */
+
+	public function test_origin_keeps_scheme_host_and_port_only(): void {
+		$this->assertSame( 'https://shop.example.com', Input::origin( ' https://Shop.Example.com/path?q=1 ' ) );
+		$this->assertSame( 'https://example.com:8443', Input::origin( 'https://example.com:8443/x' ) );
+	}
+
+	public function test_origin_refuses_http_unless_asked(): void {
+		$this->assertSame( '', Input::origin( 'http://example.com' ) );
+		$this->assertSame( 'http://localhost:8080', Input::origin( 'http://localhost:8080/', false ) );
+	}
+
+	public function test_origin_refuses_credentials_odd_hosts_and_other_schemes(): void {
+		$this->assertSame( '', Input::origin( 'https://user@example.com' ) );
+		$this->assertSame( '', Input::origin( 'https://exa mple.com' ) );
+		$this->assertSame( '', Input::origin( 'javascript:alert(1)' ) );
+		$this->assertSame( '', Input::origin( 'example.com' ) );
+		$this->assertSame( '', Input::origin( array( 'https://example.com' ) ) );
+	}
+
+	/* ── lists ──────────────────────────────────────────────────────── */
+
+	public function test_list_splits_on_commas_spaces_and_lines(): void {
+		$this->assertSame( array( 'a', 'b', 'c', 'd' ), Input::list( "a, b\nc ,,d  a" ) );
+	}
+
+	public function test_list_takes_an_array_and_drops_what_is_not_text(): void {
+		$this->assertSame( array( 'a', 'b' ), Input::list( array( ' a ', '', array( 'x' ), 'b', 'a' ) ) );
+	}
+
+	public function test_list_reads_no_more_than_the_cap(): void {
+		$this->assertSame( array( 'a', 'b' ), Input::list( 'a,b,c', 2 ) );
+		$this->assertSame( array(), Input::list( null ) );
+	}
+
+	/* ── masks ──────────────────────────────────────────────────────── */
+
+	public function test_mask_shows_both_ends_of_a_long_value(): void {
+		$this->assertSame( 'AKIA…WXYZ', Input::mask( 'AKIA0123456789WXYZ' ) );
+		$this->assertSame( 'med…ia', Input::mask( 'media-bucket-ia' ) );
+	}
+
+	public function test_mask_shows_one_character_of_a_short_value(): void {
+		$this->assertSame( 'a…', Input::mask( 'abcdef' ) );
+		$this->assertSame( '…', Input::mask( '' ) );
+	}
+
+	/* ── number lists ───────────────────────────────────────────────── */
+
+	public function test_number_list_clamps_and_rounds(): void {
+		$this->assertSame( array( 0.0, 0.33, 1.0 ), Input::number_list( array( -1, 0.3333, 7 ), 0.0, 1.0, 0, 2 ) );
+	}
+
+	public function test_number_list_is_all_or_nothing(): void {
+		$this->assertNull( Input::number_list( array( 0.1, '0.2' ), 0.0, 1.0 ) );
+		$this->assertNull( Input::number_list( array(), 0.0, 1.0 ) );
+		$this->assertNull( Input::number_list( array( 'a' => 0.1 ), 0.0, 1.0 ) );
+		$this->assertNull( Input::number_list( '0.1,0.2', 0.0, 1.0 ) );
+	}
+
+	public function test_number_list_refuses_more_than_the_cap(): void {
+		$this->assertNull( Input::number_list( array( 0.1, 0.2, 0.3 ), 0.0, 1.0, 2 ) );
+		$this->assertSame( array( 0.1, 0.2 ), Input::number_list( array( 0.1, 0.2 ), 0.0, 1.0, 2 ) );
+	}
 }

@@ -29,6 +29,14 @@ Input::int( $_GET['page'] ?? 1, 1, 10_000, 1 );
 Input::int_or_null( $_POST['expiry'] ?? null, 1, 3650 );   // null when unset
 Input::hex_colour( $value );                               // '#6d28d9', or ''
 Input::one_of( $_GET['sort'] ?? '', $sortable, 'created_at' );
+
+// Lists and switches (1.3.0)
+Input::prefixed_ids( $_POST['price'] ?? [], 'price', 20 );  // valid ids, once each, in order
+Input::list( "a, b\nc" );                                   // ['a', 'b', 'c']
+Input::bool( $settings['enabled'] ?? null );                // strict: 'false' is false
+Input::origin( 'https://Shop.example.com/x' );              // 'https://shop.example.com', or ''
+Input::mask( $access_key );                                 // 'AKIA…WXYZ'
+Input::number_list( $peaks, 0.0, 1.0, 4_000, 2 );           // clamped, or null
 ```
 
 `clean_text()`, `multiline()`, `email()`, `url()`, `hex_colour()` and
@@ -115,11 +123,42 @@ $sort = Input::one_of( $_GET['sort'] ?? '', array( 'created_at', 'name' ), 'crea
 $db->all( "SELECT * FROM things ORDER BY {$sort} DESC" );
 ```
 
+**`prefixed_ids()`** is `prefixed_id()` for a list — the prices in a cart,
+the products on a shelf. Entries that do not match are dropped rather than
+failing the list, duplicates go, and the caller's order is kept. The cap is on
+how many entries are *read*, so a list padded with ten thousand values costs no
+more than one at the cap.
+
+**`list()`** reads a list somebody typed into one field — commas, spaces, new
+lines, or all three — or an array. Entries are trimmed, empties and duplicates
+dropped, order kept. It does not judge the entries: pass each through the
+validator for what it should be.
+
+**`bool()`** is strict about switches. `true`, `1`, `"1"`, `"true"`, `"on"`
+and `"yes"` are on; their opposites are off; anything else is the default.
+`(bool) "false"` is `true`, which is how a setting ends up doing the opposite of
+what somebody chose.
+
+**`origin()`** reduces a URL to scheme, host and port — what a browser's
+`Origin` header is compared with. https only unless you pass `false`; a value
+carrying credentials (`https://user@host`) or an odd host is refused.
+
+**`mask()`** shortens a credential or bucket name to what recognises it: four
+characters of each end from sixteen up, three and two below that, one character
+of anything six or shorter.
+
+**`number_list()`** is for numbers a browser computed and sent back — a
+waveform's peaks. All or nothing: one entry that is not a JSON number means the
+list is not what the page drew, so the answer is `null` rather than the rest.
+
 ## Testing
 
 ```bash
 composer test
 ```
+
+75 tests: every method's happy path, its refusals, and the non-scalar input a
+form or JSON body can carry where a string was expected.
 
 ## License
 
