@@ -22,6 +22,7 @@ Input::multiline( $note, 1_000, 20 );       // paragraphs kept, runs of blanks c
 Input::truncate( $html, 20_000 );          // trimmed and capped, inside untouched
 Input::email( ' Jordan@EXAMPLE.COM ' );     // 'Jordan@example.com', or ''
 Input::mask_email( 'jordan@example.com' );  // 'jo****@example.com'
+Input::mask_email( $email, '•', 2, last_at: true, keep_invalid: true ); // 'ge••••@gmail.com' (1.5.0)
 Input::url( $value );                       // http(s) only, or ''
 Input::prefixed_id( $value, 'acct' );       // 'acct_1A2b3C', or ''
 Input::hex( $value, 64 );                   // lower-cased, exact length, or ''
@@ -70,6 +71,14 @@ yours.
 **`mask_email()`** is for lists and logs. `jo****@example.com` is enough to
 recognise an address you already know and not enough to harvest one you do not.
 Show the full value on one screen, and log the reveal.
+
+Since 1.5.0 it takes the mask character, the fewest mask characters to show
+(at 2, `a@example.com` and `ab@example.com` both get two, so the mask says
+nothing about how short the address is), `last_at` to split at the last `@` —
+a domain cannot contain one and a quoted local part can — and `keep_invalid` to
+hand back a value with no `@`, or nothing before it, as it was given rather than
+`''`. The defaults are what it always did. Characters are counted, not bytes,
+so an accented letter is kept or masked whole.
 
 **`url()`** rejects every scheme but http and https. `javascript:` and `data:`
 are the ones that matter — both become script execution the moment the value
@@ -158,7 +167,7 @@ list is not what the page drew, so the answer is `null` rather than the rest.
 composer test
 ```
 
-75 tests: every method's happy path, its refusals, and the non-scalar input a
+76 tests: every method's happy path, its refusals, and the non-scalar input a
 form or JSON body can carry where a string was expected.
 
 ## License

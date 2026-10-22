@@ -121,6 +121,46 @@ final class InputTest extends TestCase {
 		$this->assertSame( 'a*@example.com', Input::mask_email( 'a@example.com' ) );
 	}
 
+	/**
+	 * FreshlyVault's admin lists: `•`, at least two of them, split at the
+	 * last `@`, and anything that is not an address shown as stored.
+	 *
+	 * @return array<string, array{0: string, 1: string}>
+	 */
+	public static function bulleted(): array {
+		return array(
+			'george'          => array( 'george@gmail.com', "ge\u{2022}\u{2022}\u{2022}\u{2022}@gmail.com" ),
+			'one character'   => array( 'a@example.com', "a\u{2022}\u{2022}@example.com" ),
+			'long'            => array( 'david.sherlock@x.co.uk', 'da' . str_repeat( "\u{2022}", 12 ) . '@x.co.uk' ),
+			'two characters'  => array( 'ab@x', "ab\u{2022}\u{2022}@x" ),
+			'last @'          => array( 'a@b@c.com', "a@\u{2022}\u{2022}@c.com" ),
+			'no @'            => array( 'nope', 'nope' ),
+			'nothing before'  => array( '@x.com', '@x.com' ),
+			'empty'           => array( '', '' ),
+		);
+	}
+
+	#[DataProvider( 'bulleted' )]
+	public function test_mask_email_takes_a_mask_a_minimum_and_where_to_split( string $email, string $expected ): void {
+		$this->assertSame( $expected, Input::mask_email( $email, "\u{2022}", 2, last_at: true, keep_invalid: true ) );
+	}
+
+	public function test_mask_email_defaults_are_unchanged(): void {
+		$this->assertSame( 'a*@b@c.com', Input::mask_email( 'a@b@c.com' ) );
+		$this->assertSame( '*@x.com', Input::mask_email( '@x.com' ) );
+		$this->assertSame( 'ab*@x', Input::mask_email( 'ab@x' ) );
+	}
+
+	public function test_mask_email_masks_characters_not_bytes(): void {
+		$this->assertSame( "jö\u{2022}\u{2022}@x.de", Input::mask_email( 'jörg@x.de', "\u{2022}", 2 ) );
+		$this->assertSame( 'é*@x.de', Input::mask_email( 'é@x.de' ) );
+	}
+
+	public function test_mask_email_can_return_a_non_address_as_given(): void {
+		$this->assertSame( 'nope', Input::mask_email( 'nope', keep_invalid: true ) );
+		$this->assertSame( '', Input::mask_email( 'nope' ) );
+	}
+
 	public function test_mask_email_rejects_a_non_address(): void {
 		$this->assertSame( '', Input::mask_email( 'nope' ) );
 	}

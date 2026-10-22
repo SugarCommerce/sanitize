@@ -177,21 +177,54 @@ final class Input {
 	 * `jordan@example.com` becomes `jo****@example.com`. Enough to recognise
 	 * an address you already know, not enough to harvest one you do not.
 	 *
+	 * The first two characters of the local part stay (one, when that is
+	 * all there is) and the rest are masked, with at least `$min_hidden`
+	 * mask characters whatever the length — at 2, `a@example.com` and
+	 * `ab@example.com` both mask to two, so the mask says nothing about how
+	 * short the address is. Characters, not bytes: an accented letter is
+	 * kept or masked whole, never cut in half.
+	 *
+	 * `$last_at` splits at the last `@` rather than the first. A domain
+	 * cannot contain one and a quoted local part can, so the last is the
+	 * right one for a real address; the first is the default only because
+	 * it always was. `$keep_invalid` hands back what is not an address — no
+	 * `@`, or nothing before it — as it was given rather than '', for a list
+	 * cell that should show whatever is stored.
+	 *
+	 * ```php
+	 * Input::mask_email( $email, '•', 2, last_at: true, keep_invalid: true ); // 'ge••••@gmail.com'
+	 * ```
+	 *
 	 * @since 1.0.0
+	 * @since 1.5.0 Takes the mask character, a minimum mask length, where to
+	 *              split and what to do with a non-address.
 	 *
-	 * @param string $value An address.
+	 * @param string $value        An address.
+	 * @param string $mask         What each hidden character becomes.
+	 * @param int    $min_hidden   The fewest mask characters shown.
+	 * @param bool   $last_at      Split at the last `@` rather than the first.
+	 * @param bool   $keep_invalid Return a non-address unchanged, not ''.
 	 *
-	 * @return string The masked form, or '' when the input was not an address.
+	 * @return string The masked form; '' (or the input, with `$keep_invalid`)
+	 *                when the input was not an address.
 	 */
-	public static function mask_email( string $value ): string {
-		if ( ! str_contains( $value, '@' ) ) {
-			return '';
+	public static function mask_email(
+		string $value,
+		string $mask = '*',
+		int $min_hidden = 1,
+		bool $last_at = false,
+		bool $keep_invalid = false,
+	): string {
+		$at = $last_at ? strrpos( $value, '@' ) : strpos( $value, '@' );
+
+		if ( false === $at || ( $keep_invalid && 0 === $at ) ) {
+			return $keep_invalid ? $value : '';
 		}
 
-		[ $local, $domain ] = explode( '@', $value, 2 );
-		$keep               = mb_substr( $local, 0, min( 2, mb_strlen( $local ) ) );
+		$local = substr( $value, 0, $at );
+		$keep  = mb_substr( $local, 0, min( 2, mb_strlen( $local ) ) );
 
-		return $keep . str_repeat( '*', max( 1, mb_strlen( $local ) - mb_strlen( $keep ) ) ) . '@' . $domain;
+		return $keep . str_repeat( $mask, max( $min_hidden, mb_strlen( $local ) - mb_strlen( $keep ) ) ) . substr( $value, $at );
 	}
 
 	/**
