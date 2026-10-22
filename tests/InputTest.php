@@ -599,4 +599,23 @@ final class InputTest extends TestCase {
 	public function test_number_list_refuses_nan(): void {
 		$this->assertNull( Input::number_list( array( 0.5, NAN ), 0, 1 ) );
 	}
+
+	/* ─── lines (1.7.0) ─────────────────────────────────────────────── */
+
+	public function test_lines_keeps_spaces_commas_duplicates_and_order(): void {
+		$this->assertSame(
+			array( 'Sample Packs/Foo, Vol 2.zip', 'https://cdn.example.com/a.zip', 'Sample Packs/Foo, Vol 2.zip', '0' ),
+			Input::lines( "  Sample Packs/Foo, Vol 2.zip \r\n\r\nhttps://cdn.example.com/a.zip\rSample Packs/Foo, Vol 2.zip\n\t\n0\n" )
+		);
+	}
+
+	public function test_lines_stops_at_the_maximum(): void {
+		$this->assertSame( array( 'a', 'b' ), Input::lines( "a\n\nb\nc", 2 ) );
+	}
+
+	public function test_lines_of_anything_but_a_string_is_empty(): void {
+		$this->assertSame( array(), Input::lines( array( 'a' ) ) );
+		$this->assertSame( array(), Input::lines( null ) );
+		$this->assertSame( array(), Input::lines( "\n \r\n" ) );
+	}
 }

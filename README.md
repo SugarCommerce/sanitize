@@ -36,6 +36,7 @@ Input::one_of( $_GET['sort'] ?? '', $sortable, 'created_at' );
 // Lists and switches (1.3.0)
 Input::prefixed_ids( $_POST['price'] ?? [], 'price', 20 );  // valid ids, once each, in order
 Input::list( "a, b\nc" );                                   // ['a', 'b', 'c']
+Input::lines( $_POST['paths'] ?? '' );      // one per line, trimmed, blanks dropped; spaces, commas, duplicates and order kept
 Input::bool( $settings['enabled'] ?? null );                // strict: 'false' is false
 Input::origin( 'https://Shop.example.com/x' );              // 'https://shop.example.com', or ''
 Input::mask( $access_key );                                 // 'AKIA…WXYZ'
@@ -169,7 +170,7 @@ list is not what the page drew, so the answer is `null` rather than the rest.
 composer test
 ```
 
-83 tests: every method's happy path, its refusals, and the non-scalar input a
+140 tests: every method's happy path, its refusals, and the non-scalar input a
 form or JSON body can carry where a string was expected.
 
 ## License

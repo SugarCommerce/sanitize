@@ -650,6 +650,47 @@ final class Input {
 	}
 
 	/**
+	 * One entry per line, from a textarea.
+	 *
+	 * For entries that can hold spaces or commas themselves — file paths,
+	 * addresses, titles — where list() would split them apart. Lines are
+	 * split on any line ending, each is trimmed, and blank ones go.
+	 * Duplicates and order are kept: a position can mean something (a
+	 * download link that points at "the second file"), so removing one is
+	 * the caller's decision.
+	 *
+	 * @since 1.7.0
+	 *
+	 * @param mixed $value A string; anything else is empty.
+	 * @param int   $max   Entries kept at most, 0 for no limit.
+	 *
+	 * @return list<string>
+	 */
+	public static function lines( mixed $value, int $max = 0 ): array {
+		if ( ! is_string( $value ) ) {
+			return array();
+		}
+
+		$lines = array();
+
+		foreach ( preg_split( '/\r\n|\r|\n/', $value ) ?: array() as $line ) {
+			$line = trim( $line );
+
+			if ( '' === $line ) {
+				continue;
+			}
+
+			$lines[] = $line;
+
+			if ( $max > 0 && count( $lines ) >= $max ) {
+				break;
+			}
+		}
+
+		return $lines;
+	}
+
+	/**
 	 * A credential or name, shortened to what recognises it: `med…ia`.
 	 *
 	 * Enough of each end to tell two apart in a list, never enough to use.
