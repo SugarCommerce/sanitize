@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace SugarCommerce\Sanitize\Tests;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use SugarCommerce\Sanitize\Input;
 
@@ -386,5 +387,87 @@ final class InputTest extends TestCase {
 	public function test_number_list_refuses_more_than_the_cap(): void {
 		$this->assertNull( Input::number_list( array( 0.1, 0.2, 0.3 ), 0.0, 1.0, 2 ) );
 		$this->assertSame( array( 0.1, 0.2 ), Input::number_list( array( 0.1, 0.2 ), 0.0, 1.0, 2 ) );
+	}
+
+	/* ── found in review ─────────────────────────────────────────────── */
+
+	/**
+	 * The bidirectional isolates are what "Trojan Source" used, and the
+	 * docblock always promised C1 as well as C0.
+	 *
+	 * @return array<string, array{0: string}>
+	 */
+	public static function invisible(): array {
+		return array(
+			'right-to-left isolate'    => array( "\u{2067}" ),
+			'first-strong isolate'     => array( "\u{2068}" ),
+			'pop directional isolate'  => array( "\u{2069}" ),
+			'left-to-right isolate'    => array( "\u{2066}" ),
+			'Arabic letter mark'       => array( "\u{061C}" ),
+			'soft hyphen'              => array( "\u{00AD}" ),
+			'Mongolian vowel separator' => array( "\u{180E}" ),
+			'Hangul filler'            => array( "\u{3164}" ),
+			'a tag character'          => array( "\u{E0041}" ),
+			'C1 next line'             => array( "\u{0085}" ),
+			'C1 control'               => array( "\u{009B}" ),
+		);
+	}
+
+	#[DataProvider( 'invisible' )]
+	public function test_clean_text_strips_every_invisible_character( string $character ): void {
+		$this->assertSame( 'exe.txt', Input::clean_text( "exe{$character}.txt" ) );
+		$this->assertSame( 'exe.txt', Input::multiline( "exe{$character}.txt" ) );
+	}
+
+	/**
+	 * The first 254 characters of a longer string are a different address.
+	 */
+	public function test_an_address_too_long_is_refused_rather_than_cut(): void {
+		$this->assertSame( '', Input::email( str_repeat( 'a', 60 ) . '@' . str_repeat( 'b', 63 ) . '.' . str_repeat( 'c', 63 ) . '.' . str_repeat( 'd', 63 ) . '.example.org' ) );
+	}
+
+	public function test_a_url_too_long_is_refused_rather_than_cut(): void {
+		$this->assertSame( '', Input::url( 'https://example.com/' . str_repeat( 'a', 2100 ) ) );
+	}
+
+	/**
+	 * A float past PHP_INT_MAX cast to 0 with a warning, which int_or_null()
+	 * read as "nothing chosen" — no limit at all.
+	 */
+	public function test_a_number_too_big_for_an_int_clamps_to_the_maximum(): void {
+		$this->assertSame( 10, Input::int( 1e30, 1, 10 ) );
+		$this->assertSame( 10, Input::int( '1e30', 1, 10 ) );
+		$this->assertSame( 1, Input::int( -1e30, 1, 10 ) );
+		$this->assertSame( 100, Input::int_or_null( 1e30, 1, 100 ) );
+		$this->assertSame( 3, Input::int( NAN, 1, 10, 3 ) );
+	}
+
+	public function test_one_of_with_nothing_permitted_is_empty(): void {
+		$this->assertSame( '', Input::one_of( 'a', array() ) );
+		$this->assertSame( 'b', Input::one_of( 'z', array( 2 => 'b' ) ) );
+	}
+
+	public function test_hex_of_a_length_below_one_is_empty(): void {
+		$this->assertSame( '', Input::hex( '', 0 ) );
+		$this->assertSame( '', Input::hex( 'ab', -1 ) );
+	}
+
+	/**
+	 * Five of seven characters is most of a secret.
+	 */
+	public function test_mask_shows_one_character_below_ten(): void {
+		$this->assertSame( 's…', Input::mask( 'secret1' ) );
+		$this->assertSame( 'sec…90', Input::mask( 'secret7890' ) );
+	}
+
+	public function test_mask_never_cuts_a_character_in_half(): void {
+		$masked = Input::mask( 'ééééééééééé' );
+
+		$this->assertSame( 'ééé…éé', $masked );
+		$this->assertTrue( mb_check_encoding( $masked, 'UTF-8' ) );
+	}
+
+	public function test_number_list_refuses_nan(): void {
+		$this->assertNull( Input::number_list( array( 0.5, NAN ), 0, 1 ) );
 	}
 }

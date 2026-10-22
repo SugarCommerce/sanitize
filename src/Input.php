@@ -27,13 +27,39 @@ namespace SugarCommerce\Sanitize;
 final class Input {
 
 	/**
+	 * Control characters: C0 except tab, newline and carriage return, DEL,
+	 * and C1.
+	 *
+	 * @since 1.4.0
+	 */
+	private const string CONTROL = '/[\x{00}-\x{08}\x{0B}\x{0C}\x{0E}-\x{1F}\x{7F}-\x{9F}]/u';
+
+	/**
+	 * Characters that change how text displays without being seen.
+	 *
+	 * Zero-width spaces and joiners, the soft hyphen and the invisible
+	 * fillers; every bidirectional control — the embeddings and overrides
+	 * (U+202A–U+202E) and the isolates (U+2066–U+2069) that "Trojan Source"
+	 * used, plus the Arabic letter mark; invisible operators; the
+	 * interlinear annotation marks; the byte-order mark; and the Unicode tag
+	 * block, which renders as nothing and can carry a whole hidden sentence.
+	 *
+	 * @since 1.4.0
+	 */
+	private const string INVISIBLE = '/[\x{00AD}\x{034F}\x{061C}\x{115F}\x{1160}\x{17B4}\x{17B5}\x{180E}\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{206F}\x{3164}\x{FEFF}\x{FFA0}\x{FFF9}-\x{FFFB}\x{E0000}-\x{E007F}]/u';
+
+	/**
 	 * Strip control characters and collapse whitespace.
 	 *
 	 * Removes the C0 and C1 ranges except tab, newline and carriage return,
 	 * plus the Unicode characters used for display spoofing: zero-width
-	 * joiners, bidirectional overrides and the byte-order mark. A filename
-	 * containing U+202E renders right-to-left and can make `exe.txt` look
-	 * like `txt.exe`, which is a real upload attack and not a theoretical one.
+	 * joiners, bidirectional overrides and isolates, the byte-order mark and
+	 * the rest of {@see self::INVISIBLE}. A filename containing U+202E
+	 * renders right-to-left and can make `exe.txt` look like `txt.exe`,
+	 * which is a real upload attack and not a theoretical one.
+	 *
+	 * Text that is not valid UTF-8 comes back as '': there is no safe way to
+	 * guess what it was meant to say.
 	 *
 	 * @since 1.0.0
 	 *
@@ -50,8 +76,7 @@ final class Input {
 			return '';
 		}
 
-		$value = preg_replace( '/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', (string) $value ) ?? '';
-		$value = preg_replace( '/[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2064}\x{FEFF}]/u', '', $value ) ?? '';
+		$value = self::strip( (string) $value );
 		$value = trim( preg_replace( '/\s+/u', ' ', $value ) ?? '' );
 
 		if ( $max_length > 0 && mb_strlen( $value ) > $max_length ) {
@@ -86,8 +111,7 @@ final class Input {
 			return '';
 		}
 
-		$value = preg_replace( '/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', (string) $value ) ?? '';
-		$value = preg_replace( '/[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2064}\x{FEFF}]/u', '', $value ) ?? '';
+		$value = self::strip( (string) $value );
 
 		// Both \r\n and a lone \r become \n before anything counts lines.
 		$value = str_replace( array( "\r\n", "\r" ), "\n", $value );
@@ -124,6 +148,10 @@ final class Input {
 	 * mail servers that treat the local part as case-sensitive, and the
 	 * bounce is nobody's fault but yours.
 	 *
+	 * Longer than 254 characters is refused, not shortened: the first 254
+	 * characters of something are a different address, and possibly a valid
+	 * one belonging to somebody else.
+	 *
 	 * @since 1.0.0
 	 *
 	 * @param mixed $value Untrusted address.
@@ -131,9 +159,9 @@ final class Input {
 	 * @return string The address, or '' when it is not one.
 	 */
 	public static function email( mixed $value ): string {
-		$value = self::clean_text( $value, 254 );
+		$value = self::clean_text( $value );
 
-		if ( ! str_contains( $value, '@' ) ) {
+		if ( ! str_contains( $value, '@' ) || mb_strlen( $value ) > 254 ) {
 			return '';
 		}
 
@@ -173,6 +201,11 @@ final class Input {
 	 * ones that matter — both become script execution the moment the value
 	 * reaches an href, and `filter_var` alone accepts them happily.
 	 *
+	 * Valid is not the same as safe to print: `filter_var` passes
+	 * `https://a.example/"><script>`, so the result still has to be escaped
+	 * for the attribute it goes into. Longer than 2048 characters is
+	 * refused rather than cut, because a cut URL is a different URL.
+	 *
 	 * @since 1.0.0
 	 *
 	 * @param mixed $value Untrusted URL.
@@ -180,10 +213,11 @@ final class Input {
 	 * @return string The URL, or '' when it is not a usable one.
 	 */
 	public static function url( mixed $value ): string {
-		$value  = self::clean_text( $value, 2048 );
-		$scheme = strtolower( (string) parse_url( $value, PHP_URL_SCHEME ) );
+		$value  = self::clean_text( $value );
+		$scheme = parse_url( $value, PHP_URL_SCHEME );
+		$scheme = is_string( $scheme ) ? strtolower( $scheme ) : '';
 
-		if ( ! in_array( $scheme, array( 'http', 'https' ), true ) ) {
+		if ( mb_strlen( $value ) > 2048 || ! in_array( $scheme, array( 'http', 'https' ), true ) ) {
 			return '';
 		}
 
@@ -208,7 +242,7 @@ final class Input {
 	public static function prefixed_id( string $value, string $prefix ): string {
 		$value = trim( $value );
 
-		return preg_match( '/^' . preg_quote( $prefix, '/' ) . '_[A-Za-z0-9_]+$/', $value ) ? $value : '';
+		return 1 === preg_match( '/^' . preg_quote( $prefix, '/' ) . '_[A-Za-z0-9_]+$/D', $value ) ? $value : '';
 	}
 
 	/**
@@ -222,12 +256,13 @@ final class Input {
 	 * @param string $value  Untrusted hex.
 	 * @param int    $length Exact number of characters required.
 	 *
-	 * @return string The lower-cased hex, or ''.
+	 * @return string The lower-cased hex, or ''. Always '' for a length
+	 *                below one.
 	 */
 	public static function hex( string $value, int $length ): string {
 		$value = trim( $value );
 
-		return preg_match( '/^[a-f0-9]{' . $length . '}$/i', $value ) ? strtolower( $value ) : '';
+		return $length > 0 && 1 === preg_match( '/^[a-f0-9]{' . $length . '}$/iD', $value ) ? strtolower( $value ) : '';
 	}
 
 	/**
@@ -236,6 +271,10 @@ final class Input {
 	 * Clamped rather than rejected: a page number of 10,000,000 is somebody
 	 * fuzzing, and answering with the last page is a better response than an
 	 * error page that tells them the query ran.
+	 *
+	 * Compared before it is converted, so a number too big for an int —
+	 * `1e30` from a JSON body — clamps to the bound it is past instead of
+	 * wrapping, or casting to 0 with a warning. NaN is the default.
 	 *
 	 * @since 1.0.0
 	 *
@@ -251,7 +290,25 @@ final class Input {
 			return $default;
 		}
 
-		return max( $min, min( $max, (int) $value ) );
+		if ( is_int( $value ) ) {
+			return max( $min, min( $max, $value ) );
+		}
+
+		$number = (float) $value;
+
+		if ( is_nan( $number ) ) {
+			return $default;
+		}
+
+		if ( $number >= $max ) {
+			return $max;
+		}
+
+		if ( $number <= $min ) {
+			return $min;
+		}
+
+		return max( $min, min( $max, (int) $number ) );
 	}
 
 	/**
@@ -326,7 +383,7 @@ final class Input {
 	 * @return int|null The clamped integer, or null when unset.
 	 */
 	public static function int_or_null( mixed $value, int $min, int $max ): ?int {
-		if ( null === $value || '' === $value || ! is_numeric( $value ) || 0 === (int) $value ) {
+		if ( ! is_numeric( $value ) || 0 === self::int( $value, PHP_INT_MIN, PHP_INT_MAX ) ) {
 			return null;
 		}
 
@@ -345,12 +402,17 @@ final class Input {
 	 * @param string             $value   Untrusted value.
 	 * @param array<int, string> $allowed Permitted values.
 	 * @param string|null        $default Returned when it is not one. Falls
-	 *                                    back to the first permitted value.
+	 *                                    back to the first permitted value,
+	 *                                    or '' when none is permitted.
 	 *
 	 * @return string
 	 */
 	public static function one_of( string $value, array $allowed, ?string $default = null ): string {
-		return in_array( $value, $allowed, true ) ? $value : ( $default ?? $allowed[0] );
+		if ( in_array( $value, $allowed, true ) ) {
+			return $value;
+		}
+
+		return $default ?? ( array() === $allowed ? '' : $allowed[ array_key_first( $allowed ) ] );
 	}
 
 	/**
@@ -371,7 +433,7 @@ final class Input {
 	 * @param string $prefix Expected prefix, without the underscore.
 	 * @param int    $max    Entries read at most. 0 for no limit.
 	 *
-	 * @return string[]
+	 * @return list<string>
 	 */
 	public static function prefixed_ids( mixed $values, string $prefix, int $max = 0 ): array {
 		$values = is_array( $values ) ? array_values( $values ) : ( is_scalar( $values ) ? array( $values ) : array() );
@@ -390,13 +452,14 @@ final class Input {
 			}
 		}
 
-		return array_map( 'strval', array_keys( $ids ) );
+		return array_map( strval( ... ), array_keys( $ids ) );
 	}
 
 	/**
 	 * A switch, strictly.
 	 *
-	 * On is JSON true, 1, "1", "true", "on" or "yes"; off is their opposites.
+	 * On is JSON true, 1, "1", "true", "on" or "yes"; off is their opposites,
+	 * and the empty string.
 	 * Anything else — "maybe", an array, a typo — is the default rather than
 	 * whatever a truthiness cast makes of it: `(bool) "false"` is true, which
 	 * is how a setting ends up doing the opposite of what somebody chose.
@@ -435,20 +498,20 @@ final class Input {
 	public static function origin( mixed $value, bool $https_only = true ): string {
 		$parts = parse_url( is_scalar( $value ) ? trim( (string) $value ) : '' );
 
-		if ( ! is_array( $parts ) || isset( $parts['user'] ) || '' === (string) ( $parts['host'] ?? '' ) ) {
+		if ( ! is_array( $parts ) || isset( $parts['user'] ) || ! isset( $parts['host'] ) || '' === $parts['host'] ) {
 			return '';
 		}
 
-		$scheme = strtolower( (string) ( $parts['scheme'] ?? '' ) );
+		$scheme = strtolower( $parts['scheme'] ?? '' );
 
 		if ( 'https' !== $scheme && ( $https_only || 'http' !== $scheme ) ) {
 			return '';
 		}
 
-		$host = strtolower( (string) $parts['host'] );
+		$host = strtolower( $parts['host'] );
 
-		return 1 === preg_match( '/^[a-z0-9.-]+$/', $host )
-			? $scheme . '://' . $host . ( isset( $parts['port'] ) ? ':' . (int) $parts['port'] : '' )
+		return 1 === preg_match( '/^[a-z0-9.-]+$/D', $host )
+			? $scheme . '://' . $host . ( isset( $parts['port'] ) ? ':' . $parts['port'] : '' )
 			: '';
 	}
 
@@ -468,7 +531,7 @@ final class Input {
 	 * @param int   $max   Entries read at most, before duplicates are
 	 *                     dropped. 0 for no limit.
 	 *
-	 * @return string[]
+	 * @return list<string>
 	 */
 	public static function list( mixed $value, int $max = 0 ): array {
 		$parts = is_array( $value )
@@ -489,7 +552,7 @@ final class Input {
 			}
 		}
 
-		return array_map( 'strval', array_keys( $list ) );
+		return array_map( strval( ... ), array_keys( $list ) );
 	}
 
 	/**
@@ -497,8 +560,9 @@ final class Input {
 	 *
 	 * Enough of each end to tell two apart in a list, never enough to use.
 	 * Four of each end from sixteen characters up — an access key — three
-	 * and two below that, and only the first character of something six or
-	 * shorter, where showing both ends would show most of it.
+	 * and two from ten, and only the first character of anything shorter,
+	 * where showing both ends would show half of it or more. Counted in
+	 * characters, so a name is never cut through the middle of one.
 	 *
 	 * @since 1.3.0
 	 *
@@ -507,13 +571,13 @@ final class Input {
 	 * @return string
 	 */
 	public static function mask( #[\SensitiveParameter] string $value ): string {
-		$length = strlen( $value );
+		$length = mb_strlen( $value );
 
-		if ( $length <= 6 ) {
-			return substr( $value, 0, 1 ) . '…';
+		if ( $length < 10 ) {
+			return mb_substr( $value, 0, 1 ) . '…';
 		}
 
-		return substr( $value, 0, $length >= 16 ? 4 : 3 ) . '…' . substr( $value, $length >= 16 ? -4 : -2 );
+		return mb_substr( $value, 0, $length >= 16 ? 4 : 3 ) . '…' . mb_substr( $value, $length >= 16 ? -4 : -2 );
 	}
 
 	/**
@@ -535,7 +599,7 @@ final class Input {
 	 * @param int|null $decimals  Round each to this many places, or null to
 	 *                            leave them.
 	 *
-	 * @return array<int, float>|null Null for an empty list too.
+	 * @return list<float>|null Null for an empty list too.
 	 */
 	public static function number_list( mixed $value, float $min, float $max, int $max_count = 0, ?int $decimals = null ): ?array {
 		if ( ! is_array( $value ) || ! array_is_list( $value ) || array() === $value || ( $max_count > 0 && count( $value ) > $max_count ) ) {
@@ -549,10 +613,29 @@ final class Input {
 				return null;
 			}
 
+			if ( is_float( $number ) && is_nan( $number ) ) {
+				return null;
+			}
+
 			$clamped   = max( $min, min( $max, (float) $number ) );
 			$numbers[] = null === $decimals ? $clamped : round( $clamped, $decimals );
 		}
 
 		return $numbers;
+	}
+
+	/**
+	 * Text with control and invisible characters removed.
+	 *
+	 * @since 1.4.0
+	 *
+	 * @param string $value Untrusted text.
+	 *
+	 * @return string '' when the text is not valid UTF-8.
+	 */
+	private static function strip( string $value ): string {
+		$value = preg_replace( self::CONTROL, '', $value ) ?? '';
+
+		return preg_replace( self::INVISIBLE, '', $value ) ?? '';
 	}
 }

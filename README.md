@@ -54,9 +54,10 @@ time somebody uses them together.
 
 **`clean_text()`** strips more than control characters. It also removes the
 Unicode used for display spoofing — zero-width joiners, the byte-order mark,
-and the bidirectional overrides that make an uploaded `exe.txt` render as
-`txt.exe` in a file listing. That is a real attack on anything that shows a
-user-supplied filename, not a theoretical one.
+the soft hyphen and invisible fillers, the Unicode tag block, and every
+bidirectional override and isolate, the controls that make an uploaded
+`exe.txt` render as `txt.exe` in a file listing. That is a real attack on
+anything that shows a user-supplied filename, not a theoretical one.
 
 Truncation is by characters, not bytes, so a limit of 120 does not cut a
 multi-byte character in half and leave invalid UTF-8 in the database.
@@ -144,8 +145,8 @@ what somebody chose.
 carrying credentials (`https://user@host`) or an odd host is refused.
 
 **`mask()`** shortens a credential or bucket name to what recognises it: four
-characters of each end from sixteen up, three and two below that, one character
-of anything six or shorter.
+characters of each end from sixteen up, three and two from ten, one character
+of anything shorter.
 
 **`number_list()`** is for numbers a browser computed and sent back — a
 waveform's peaks. All or nothing: one entry that is not a JSON number means the
