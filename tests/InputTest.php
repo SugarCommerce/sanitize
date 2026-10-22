@@ -176,6 +176,95 @@ final class InputTest extends TestCase {
 		$this->assertSame( '', Input::url( 'file:///etc/passwd' ) );
 	}
 
+	public function test_url_https_only_refuses_plain_http(): void {
+		$this->assertSame( 'https://cdn.example.com/pack.zip', Input::url( 'https://cdn.example.com/pack.zip', https_only: true ) );
+		$this->assertSame( 'HTTPS://cdn.example.com/pack.zip', Input::url( 'HTTPS://cdn.example.com/pack.zip', https_only: true ) );
+		$this->assertSame( '', Input::url( 'https://cdn.example.com/a b.zip', https_only: true ), 'not a valid URL' );
+		$this->assertSame( '', Input::url( 'http://cdn.example.com/pack.zip', https_only: true ) );
+		$this->assertSame( '', Input::url( 'ftp://cdn.example.com/pack.zip', https_only: true ) );
+		$this->assertSame( 'http://cdn.example.com/pack.zip', Input::url( 'http://cdn.example.com/pack.zip' ) );
+	}
+
+	/**
+	 * The function FreshlyVault used before pasted_code(), verbatim.
+	 */
+	private static function legacy_txid( string $raw ): ?string {
+		$txid = preg_replace( '/^\s*(Transaction\s*ID|Txn\s*ID|Reference|ID)\s*:\s*/i', '', trim( $raw ) ) ?? trim( $raw );
+		$txid = preg_replace( '/^["\'\x{201C}\x{201D}\x{2018}\x{2019}]+|["\'\x{201C}\x{201D}\x{2018}\x{2019}]+$/u', '', $txid ) ?? $txid;
+		$txid = preg_replace( '/[\s\p{Z}]+/u', '', $txid ) ?? $txid;
+		$len  = strlen( $txid );
+
+		return $len < 1 || $len > 64 || 1 !== preg_match( '/^[A-Za-z0-9_\-]+$/', $txid ) ? null : $txid;
+	}
+
+	/**
+	 * @return array<string, array{string}>
+	 */
+	public static function pasted(): array {
+		return array(
+			'plain'                => array( '9AB12345CD678901E' ),
+			'label'                => array( 'Transaction ID: 9AB12345CD678901E' ),
+			'label no space'       => array( 'TransactionID:9AB12345' ),
+			'txn label'            => array( 'txn id :  9AB12345' ),
+			'reference'            => array( 'Reference: MANUAL-ABC123' ),
+			'id'                   => array( 'ID: 123' ),
+			'curly quotes'         => array( "\u{201C}9AB12345\u{201D}" ),
+			'single quotes'        => array( "'9AB12345'" ),
+			'label then quotes'    => array( "Transaction ID: \u{2018}9AB 123\u{2019}" ),
+			'inner spaces'         => array( '9AB 123 45' ),
+			'nbsp and em space'    => array( "9AB\u{00A0}123\u{2003}45" ),
+			'leading em space'     => array( "\u{2003}9AB12345" ),
+			'newline'              => array( "9AB12345\n" ),
+			'underscore and dash'  => array( 'a_b-c' ),
+			'exactly 64'           => array( str_repeat( 'A', 64 ) ),
+			'65'                   => array( str_repeat( 'A', 65 ) ),
+			'empty'                => array( '' ),
+			'only label'           => array( 'Transaction ID:' ),
+			'only quotes'          => array( '""' ),
+			'slash'                => array( '9AB/123' ),
+			'dot'                  => array( '9AB.123' ),
+			'unicode letters'      => array( 'café123' ),
+			'broken utf-8'         => array( "9AB\xFF123" ),
+			'label in the middle'  => array( '9AB Transaction ID: 123' ),
+			'unknown label'        => array( 'Order: 9AB123' ),
+			'lowercase kept'       => array( 'abcDEF123' ),
+		);
+	}
+
+	#[DataProvider( 'pasted' )]
+	public function test_pasted_code_matches_the_function_it_replaces( string $raw ): void {
+		$this->assertSame(
+			self::legacy_txid( $raw ) ?? '',
+			Input::pasted_code( $raw, 64, array( 'Transaction ID', 'Txn ID', 'Reference', 'ID' ) )
+		);
+	}
+
+	public function test_pasted_code_without_labels_keeps_a_label_out(): void {
+		$this->assertSame( '', Input::pasted_code( 'Transaction ID: 9AB123' ) );
+		$this->assertSame( '9AB123', Input::pasted_code( ' “9AB 123” ' ) );
+	}
+
+	public function test_pasted_code_respects_the_maximum(): void {
+		$this->assertSame( 'ABCD', Input::pasted_code( 'AB CD', 4 ) );
+		$this->assertSame( '', Input::pasted_code( 'ABCDE', 4 ) );
+	}
+
+	public function test_pasted_code_refuses_what_is_not_a_string(): void {
+		$this->assertSame( '', Input::pasted_code( array( '9AB' ) ) );
+		$this->assertSame( '', Input::pasted_code( null ) );
+		$this->assertSame( '', Input::pasted_code( 123 ) );
+	}
+
+	public function test_pasted_code_labels_are_literal_text(): void {
+		$this->assertSame( '', Input::pasted_code( 'xx: 9AB', 64, array( '.*' ) ) );
+		$this->assertSame( '9AB', Input::pasted_code( '.*: 9AB', 64, array( '.*' ) ) );
+	}
+
+	public function test_pasted_code_needs_a_positive_maximum(): void {
+		$this->expectException( \InvalidArgumentException::class );
+		Input::pasted_code( 'x', 0 );
+	}
+
 	public function test_prefixed_id_requires_the_prefix(): void {
 		$this->assertSame( 'acct_123abc', Input::prefixed_id( 'acct_123abc', 'acct' ) );
 		$this->assertSame( '', Input::prefixed_id( 'cus_123abc', 'acct' ) );

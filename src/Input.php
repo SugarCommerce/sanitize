@@ -239,22 +239,83 @@ final class Input {
 	 * for the attribute it goes into. Longer than 2048 characters is
 	 * refused rather than cut, because a cut URL is a different URL.
 	 *
-	 * @since 1.0.0
+	 * With $https_only, `http://` is refused too — for a link the app will
+	 * later follow or hand out, where a plain-HTTP one can be rewritten on
+	 * the way.
 	 *
-	 * @param mixed $value Untrusted URL.
+	 * @since 1.0.0
+	 * @since 1.6.0 $https_only.
+	 *
+	 * @param mixed $value      Untrusted URL.
+	 * @param bool  $https_only Refuse http:// as well.
 	 *
 	 * @return string The URL, or '' when it is not a usable one.
 	 */
-	public static function url( mixed $value ): string {
+	public static function url( mixed $value, bool $https_only = false ): string {
 		$value  = self::clean_text( $value );
 		$scheme = parse_url( $value, PHP_URL_SCHEME );
 		$scheme = is_string( $scheme ) ? strtolower( $scheme ) : '';
 
-		if ( mb_strlen( $value ) > 2048 || ! in_array( $scheme, array( 'http', 'https' ), true ) ) {
+		if ( mb_strlen( $value ) > 2048 || ! in_array( $scheme, $https_only ? array( 'https' ) : array( 'http', 'https' ), true ) ) {
 			return '';
 		}
 
 		return false === filter_var( $value, FILTER_VALIDATE_URL ) ? '' : $value;
+	}
+
+	/**
+	 * A code somebody pasted — an order number, a transaction or tracking
+	 * id, a licence key — or ''.
+	 *
+	 * People copy more than the code: the label in front of it
+	 * ("Transaction ID: …"), the quotes around it, straight or curly, and
+	 * spaces from wherever it was laid out, including non-breaking and other
+	 * Unicode spaces that trim() cannot see. All of that is removed; what is
+	 * left has to be 1 to $max characters of A–Z, a–z, 0–9, `_` and `-`.
+	 * Case is kept: some systems' codes are case-sensitive.
+	 *
+	 * The quotes are removed by pattern, not trim(): trim() works on bytes,
+	 * and a curly quote shares its first two bytes with other characters —
+	 * an em space among them — so trimming one can cut another in half.
+	 *
+	 *   Input::pasted_code( '“Transaction ID: 9AB 12345”', 64, array( 'Transaction ID' ) ); // '9AB12345'
+	 *
+	 * @since 1.6.0
+	 *
+	 * @param mixed         $value  What was pasted.
+	 * @param int           $max    Longest code accepted.
+	 * @param array<string> $labels Labels that may come before it, followed by
+	 *                              a colon. Matched case-insensitively, with
+	 *                              any spacing where the label has a space
+	 *                              ("Txn ID" matches "TxnID:" and "txn  id :").
+	 *
+	 * @return string The code, or '' when what is left is not one.
+	 *
+	 * @throws \InvalidArgumentException When $max is under 1.
+	 */
+	public static function pasted_code( mixed $value, int $max = 64, array $labels = array() ): string {
+		if ( $max < 1 ) {
+			throw new \InvalidArgumentException( 'A code has to be allowed at least one character.' );
+		}
+
+		if ( ! is_string( $value ) ) {
+			return '';
+		}
+
+		$code = trim( $value );
+
+		if ( array() !== $labels ) {
+			// Longest first, so a label is never cut short by one it begins with.
+			usort( $labels, static fn( string $a, string $b ): int => strlen( $b ) <=> strlen( $a ) );
+
+			$names = implode( '|', array_map( static fn( string $label ): string => (string) preg_replace( '/\s+/', '\\s*', preg_quote( trim( $label ), '/' ) ), $labels ) );
+			$code  = preg_replace( '/^\s*(?:' . $names . ')\s*:\s*/iu', '', $code ) ?? $code;
+		}
+
+		$code = preg_replace( '/^["\'\x{201C}\x{201D}\x{2018}\x{2019}]+|["\'\x{201C}\x{201D}\x{2018}\x{2019}]+$/u', '', $code ) ?? $code;
+		$code = preg_replace( '/[\s\p{Z}]+/u', '', $code ) ?? $code;
+
+		return strlen( $code ) <= $max && 1 === preg_match( '/^[A-Za-z0-9_-]+$/D', $code ) ? $code : '';
 	}
 
 	/**

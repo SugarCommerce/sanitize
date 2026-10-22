@@ -24,6 +24,8 @@ Input::email( ' Jordan@EXAMPLE.COM ' );     // 'Jordan@example.com', or ''
 Input::mask_email( 'jordan@example.com' );  // 'jo****@example.com'
 Input::mask_email( $email, '•', 2, last_at: true, keep_invalid: true ); // 'ge••••@gmail.com' (1.5.0)
 Input::url( $value );                       // http(s) only, or ''
+Input::url( $value, https_only: true );     // https only, or ''
+Input::pasted_code( $value, 64, [ 'Order ID' ] );  // '“Order ID: 9AB 12”' → '9AB12', or ''
 Input::prefixed_id( $value, 'acct' );       // 'acct_1A2b3C', or ''
 Input::hex( $value, 64 );                   // lower-cased, exact length, or ''
 Input::int( $_GET['page'] ?? 1, 1, 10_000, 1 );
@@ -167,7 +169,7 @@ list is not what the page drew, so the answer is `null` rather than the rest.
 composer test
 ```
 
-76 tests: every method's happy path, its refusals, and the non-scalar input a
+83 tests: every method's happy path, its refusals, and the non-scalar input a
 form or JSON body can carry where a string was expected.
 
 ## License
