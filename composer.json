@@ -1,6 +1,6 @@
 {
   "name": "sugarcommerce/sanitize",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Untrusted strings in, something safe to store out. Control characters and display-spoofing Unicode stripped, addresses and URLs validated, integers clamped, allow-lists for the values that reach SQL as identifiers. Zero dependencies.",
   "type": "library",
   "license": "GPL-2.0-or-later",

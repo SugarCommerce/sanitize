@@ -32,6 +32,7 @@ Input::int( $_GET['page'] ?? 1, 1, 10_000, 1 );
 Input::int_or_null( $_POST['expiry'] ?? null, 1, 3650 );   // null when unset
 Input::hex_colour( $value );                               // '#6d28d9', or ''
 Input::one_of( $_GET['sort'] ?? '', $sortable, 'created_at' );
+Input::one_of_int( $_GET['days'] ?? null, array( 7, 30, 90 ), 30 );  // '30' → 30; '7.9' → 30 (1.8.0)
 
 // Lists and switches (1.3.0)
 Input::prefixed_ids( $_POST['price'] ?? [], 'price', 20 );  // valid ids, once each, in order
@@ -136,6 +137,14 @@ $sort = Input::one_of( $_GET['sort'] ?? '', array( 'created_at', 'name' ), 'crea
 $db->all( "SELECT * FROM things ORDER BY {$sort} DESC" );
 ```
 
+**`one_of_int()`** is the same for a set of whole numbers — a reporting window
+of 7, 30 or 90 days, a link lifetime of an hour or a day. It reads an int or a
+string of digits, as a query string sends one, and is stricter than `int()` on
+purpose: `int()` clamps, so `'7.9'` is near enough 7; an allow-list asks
+whether the value is one of these exactly, and `'7.9'` is not. Floats, bools,
+`'1e1'`, `'+7'` and numbers too big for an int all get the default, which,
+as with `one_of()`, falls back to the first permitted value.
+
 **`prefixed_ids()`** is `prefixed_id()` for a list — the prices in a cart,
 the products on a shelf. Entries that do not match are dropped rather than
 failing the list, duplicates go, and the caller's order is kept. The cap is on
@@ -170,7 +179,7 @@ list is not what the page drew, so the answer is `null` rather than the rest.
 composer test
 ```
 
-140 tests: every method's happy path, its refusals, and the non-scalar input a
+159 tests: every method's happy path, its refusals, and the non-scalar input a
 form or JSON body can carry where a string was expected.
 
 ## License

@@ -571,6 +571,42 @@ final class InputTest extends TestCase {
 		$this->assertSame( 3, Input::int( NAN, 1, 10, 3 ) );
 	}
 
+	#[DataProvider( 'whole_numbers' )]
+	public function test_one_of_int( mixed $value, int $expected ): void {
+		$this->assertSame( $expected, Input::one_of_int( $value, array( 7, 30, 90, -1 ), 30 ) );
+	}
+
+	/** @return array<string, array{0: mixed, 1: int}> */
+	public static function whole_numbers(): array {
+		return array(
+			'an int'               => array( 90, 90 ),
+			'digits'               => array( '7', 7 ),
+			'digits, padded'       => array( ' 90 ', 90 ),
+			'leading zeros'        => array( '007', 7 ),
+			'negative'             => array( '-1', -1 ),
+			'not permitted'        => array( 14, 30 ),
+			'digits not permitted' => array( '14', 30 ),
+			'a fraction'           => array( '7.9', 30 ),
+			'a float'              => array( 7.0, 30 ),
+			'an exponent'          => array( '9e1', 30 ),
+			'a plus sign'          => array( '+7', 30 ),
+			'hex'                  => array( '0x7', 30 ),
+			'trailing junk'        => array( '7d', 30 ),
+			'too big for an int'   => array( '99999999999999999999999', 30 ),
+			'true'                 => array( true, 30 ),
+			'null'                 => array( null, 30 ),
+			'empty'                => array( '', 30 ),
+			'an array'             => array( array( 7 ), 30 ),
+		);
+	}
+
+	public function test_one_of_int_falls_back_to_the_first_permitted_value(): void {
+		$this->assertSame( 7, Input::one_of_int( 'x', array( 7, 30 ) ) );
+		$this->assertSame( 30, Input::one_of_int( 'x', array( 3 => 30, 0 => 7 ) ) );
+		$this->assertSame( 0, Input::one_of_int( 7, array() ) );
+		$this->assertSame( 0, Input::one_of_int( '0', array( 5, 0 ) ) );
+	}
+
 	public function test_one_of_with_nothing_permitted_is_empty(): void {
 		$this->assertSame( '', Input::one_of( 'a', array() ) );
 		$this->assertSame( 'b', Input::one_of( 'z', array( 2 => 'b' ) ) );
